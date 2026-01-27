@@ -9,7 +9,7 @@
 # COMMAND ----------
 
 import os
-import csv
+
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -24,34 +24,7 @@ LOGS_DIR = Path("logs")
 
 # COMMAND ----------
 
-def detect_issues(rows):
-    """Detecta issues típicos de calidad (solo observación, no bloqueo)."""
-    issues = {"duplicate_ids": 0, "missing_name": 0, "underage": 0}
-    seen_ids = set()
 
-    for r in rows:
-        cid = (r.get("customer_id") or "").strip()
-        name = (r.get("name") or "").strip()
-
-        # duplicates
-        if cid in seen_ids:
-            issues["duplicate_ids"] += 1
-        else:
-            seen_ids.add(cid)
-
-        # missing name
-        if name == "":
-            issues["missing_name"] += 1
-
-        # underage
-        try:
-            if int(r.get("age", "0")) < 18:
-                issues["underage"] += 1
-        except ValueError:
-            # Si age viene mal, lo cuentas como issue (opcional)
-            issues["underage"] += 1
-
-    return issues
 
 # COMMAND ----------
 
@@ -61,14 +34,6 @@ def run_ingestion():
 
     if not SOURCE_FILE.exists():
         raise FileNotFoundError(f"Source file not found: {SOURCE_FILE}")
-
-    # Leer CSV
-    with open(SOURCE_FILE, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        rows = list(reader)
-
-    # Detectar issues (solo logging)
-    issues = detect_issues(rows)
 
     # Escribir a landing con timestamp
     ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
@@ -81,11 +46,6 @@ def run_ingestion():
         f"[OK] Ingestion completed | ENV={ENV}\n"
         f"Source: {SOURCE_FILE}\n"
         f"Target: {target_file}\n"
-        f"Rows ingested: {len(rows)}\n"
-        f"Issues detected:\n"
-        f"  - Duplicate customer_id: {issues['duplicate_ids']}\n"
-        f"  - Missing name: {issues['missing_name']}\n"
-        f"  - Underage customers: {issues['underage']}\n"
         f"Timestamp: {ts}\n"
         "------------------------------------\n"
     )
