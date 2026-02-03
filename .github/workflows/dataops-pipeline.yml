@@ -199,3 +199,41 @@ jobs:
 
       - name: Run quality gate
         run: python framework/mlops/quality_gate.py
+
+
+  mlops-register:
+    name: mlops-register
+    runs-on: ubuntu-latest
+    needs: mlops-quality-gate
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download ML artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mlops-artifacts
+          path: framework/mlops/artifacts/
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          pip install databricks-sql-connector
+
+      - name: Register model in Databricks
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          SILVER_TABLE: demo.silver_customers_v2
+          MODEL_NAME: customer_risk
+          REGISTRY_TABLE: demo.model_registry
+          GIT_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python framework/mlops/register_model.py
