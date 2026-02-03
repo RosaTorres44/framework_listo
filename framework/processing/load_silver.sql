@@ -1,5 +1,5 @@
 INSERT INTO
-    demo.silver_customers (
+    __SILVER_TABLE__ (
         ingest_ts,
         customer_id,
         customer_name,
