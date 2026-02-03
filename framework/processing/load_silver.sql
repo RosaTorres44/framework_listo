@@ -1,24 +1,37 @@
--- SILVER: adaptado al schema existente (sin migración)
+-- SILVER (ACL-safe): inserta SOLO columnas existentes y en el mismo orden/contrato
 
 INSERT INTO
-    demo.silver_customers
+    demo.silver_customers (
+        ingest_ts,
+        customer_id,
+        customer_name,
+        email,
+        status,
+        payload,
+        dq_is_name_null,
+        dq_is_underage,
+        dq_status
+    )
 SELECT CAST(ingest_ts AS TIMESTAMP) AS ingest_ts,
 
--- Mantener STRING (no INT)
+-- mantener STRING (según el schema actual)
 get_json_object (raw_payload, '$.customer_id') AS customer_id,
 
--- name → customer_name
+-- name -> customer_name
 NULLIF(
     TRIM(
         get_json_object (raw_payload, '$.name')
     ),
     ''
 ) AS customer_name,
+NULLIF(
+    TRIM(
+        get_json_object (raw_payload, '$.email')
+    ),
+    ''
+) AS email,
 
--- email
-NULLIF( TRIM( get_json_object (raw_payload, '$.email') ), '' ) AS email,
-
--- status derivado de reglas de calidad
+-- status derivado
 CASE
     WHEN NULLIF(
         TRIM(
@@ -32,10 +45,8 @@ CASE
     ELSE 'PASS'
 END AS status,
 
--- payload: guardamos el raw completo (trazabilidad)
+-- payload = raw original para trazabilidad
 raw_payload AS payload,
-
--- Quality flags
 CASE
     WHEN NULLIF(
         TRIM(
