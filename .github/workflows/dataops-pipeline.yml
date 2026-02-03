@@ -151,3 +151,33 @@ jobs:
       - name: Run basic dataset tests
         run: |
           python framework/tests/test_dataset.py
+
+
+  mlops-train:
+    name: mlops-train
+    runs-on: ubuntu-latest
+    needs: silver
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ML dependencies
+        run: |
+          pip install -r framework/mlops/requirements-mlops.txt
+
+      - name: Train model (MLOps)
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          SILVER_TABLE: demo.silver_customers_v2
+          MODEL_NAME: customer_risk
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          python framework/mlops/train.py
