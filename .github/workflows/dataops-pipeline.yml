@@ -1,4 +1,4 @@
-name: DataOps Pipeline – Bronze to Silver
+name: DataOps Pipeline – Bronze to Silver (SQL-only)
 
 on:
   workflow_dispatch: {}
@@ -13,13 +13,20 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
-      - run: |
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
           python -m pip install --upgrade pip
           pip install databricks-sql-connector
-      - name: Deploy tables/schemas
+
+      - name: Deploy base objects (schema + bronze + ops tables)
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
@@ -28,17 +35,33 @@ jobs:
         run: |
           python framework/processing/run_sql.py
 
+      - name: Deploy Silver v2 table (ACL-safe)
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          SQL_FILE: framework/deployment/deploy_silver_v2.sql
+        run: |
+          python framework/processing/run_sql.py
+
   bronze:
     runs-on: ubuntu-latest
     needs: deploy
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
-      - run: |
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
           python -m pip install --upgrade pip
           pip install databricks-sql-connector
-      - name: Ingest Bronze
+
+      - name: Ingest Bronze into Databricks SQL
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
@@ -49,31 +72,40 @@ jobs:
         run: |
           python framework/ingestion/ingest_bronze.py
 
-  silver: 
+  silver:
     runs-on: ubuntu-latest
     needs: bronze
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
-      - run: |
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
           python -m pip install --upgrade pip
           pip install databricks-sql-connector
 
-      - name: Debug silver SQL file
+      - name: Debug silver SQL file (first 80 lines)
         run: |
-          echo "Repo root:"
+          echo "PWD:"
           pwd
-          ls -la framework/processing || true
-          echo "---- load_silver.sql (first 60 lines) ----"
-          sed -n '1,60p' framework/processing/load_silver.sql
+          echo "Repo root contents:"
+          ls -la
+          echo "---- framework/processing/load_silver.sql (first 80 lines) ----"
+          sed -n '1,80p' framework/processing/load_silver.sql
 
-      - name: Load Silver (v2)
+      - name: Load Silver (forced v2)
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          env:
           SQL_FILE: framework/processing/load_silver.sql
+          SILVER_TABLE: demo.silver_customers_v2
         run: |
           python framework/processing/run_sql.py
 
@@ -81,18 +113,26 @@ jobs:
     runs-on: ubuntu-latest
     needs: silver
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
-      - run: |
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
           python -m pip install --upgrade pip
           pip install databricks-sql-connector
-      - name: Validate Silver + write ops_dq_results
+
+      - name: Validate Silver v2 + write ops_dq_results
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
           RUN_ID: ${{ github.run_id }}
+          SILVER_TABLE: demo.silver_customers_v2
         run: |
           python framework/validation/validate_silver.py
 
@@ -100,9 +140,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: validation
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
-      - name: Run dataset tests
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run basic dataset tests
         run: |
           python framework/tests/test_dataset.py
