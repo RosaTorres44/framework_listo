@@ -1,25 +1,31 @@
-import os
-from databricks import sql
+-- SILVER: parse + clean + quality flags
+CREATE TABLE IF NOT EXISTS demo.silver_customers (
+  ingest_ts TIMESTAMP,
+  customer_id INT,
+  name STRING,
+  age INT,
+  country STRING,
+  email STRING,
+  dq_is_name_null BOOLEAN,
+  dq_is_underage BOOLEAN,
+  dq_status STRING
+);
 
-HOST = os.environ["DATABRICKS_HOST"]
-HTTP_PATH = os.environ["DATABRICKS_HTTP_PATH"]
-TOKEN = os.environ["DATABRICKS_TOKEN"]
-SQL_FILE = os.environ.get("SQL_FILE")
+INSERT INTO demo.silver_customers
+SELECT
+  CAST(ingest_ts AS TIMESTAMP) AS ingest_ts,
+  CAST(get_json_object(raw_payload, '$.customer_id') AS INT) AS customer_id,
+  NULLIF(TRIM(get_json_object(raw_payload, '$.name')), '') AS name,
+  CAST(get_json_object(raw_payload, '$.age') AS INT) AS age,
+  NULLIF(TRIM(get_json_object(raw_payload, '$.country')), '') AS country,
+  NULLIF(TRIM(get_json_object(raw_payload, '$.email')), '') AS email,
 
-def main():
-    if not SQL_FILE:
-        raise ValueError("Missing SQL_FILE env var")
-    with open(SQL_FILE, "r", encoding="utf-8") as f:
-        script = f.read()
+  CASE WHEN NULLIF(TRIM(get_json_object(raw_payload, '$.name')), '') IS NULL THEN TRUE ELSE FALSE END AS dq_is_name_null,
+  CASE WHEN CAST(get_json_object(raw_payload, '$.age') AS INT) < 18 THEN TRUE ELSE FALSE END AS dq_is_underage,
 
-    statements = [s.strip() for s in script.split(";") if s.strip()]
-
-    with sql.connect(server_hostname=HOST, http_path=HTTP_PATH, access_token=TOKEN) as conn:
-        with conn.cursor() as cur:
-            for st in statements:
-                cur.execute(st)
-
-    print(f"✅ Executed SQL file: {SQL_FILE} ({len(statements)} statements)")
-
-if __name__ == "__main__":
-    main()
+  CASE
+    WHEN NULLIF(TRIM(get_json_object(raw_payload, '$.name')), '') IS NULL THEN 'FAIL_NAME_NULL'
+    WHEN CAST(get_json_object(raw_payload, '$.age') AS INT) < 18 THEN 'WARN_UNDERAGE'
+    ELSE 'PASS'
+  END AS dq_status
+FROM demo.bronze_customers;
