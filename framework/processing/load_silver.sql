@@ -1,5 +1,3 @@
--- SILVER (ACL-safe): inserta SOLO columnas existentes y en el mismo orden/contrato
-
 INSERT INTO
     demo.silver_customers (
         ingest_ts,
@@ -12,66 +10,59 @@ INSERT INTO
         dq_is_underage,
         dq_status
     )
-SELECT CAST(ingest_ts AS TIMESTAMP) AS ingest_ts,
-
--- mantener STRING (según el schema actual)
-get_json_object (raw_payload, '$.customer_id') AS customer_id,
-
--- name -> customer_name
-NULLIF(
-    TRIM(
-        get_json_object (raw_payload, '$.name')
-    ),
-    ''
-) AS customer_name,
-NULLIF(
-    TRIM(
-        get_json_object (raw_payload, '$.email')
-    ),
-    ''
-) AS email,
-
--- status derivado
-CASE
-    WHEN NULLIF(
+SELECT
+    CAST(ingest_ts AS TIMESTAMP) AS ingest_ts,
+    get_json_object (raw_payload, '$.customer_id') AS customer_id,
+    NULLIF(
         TRIM(
             get_json_object (raw_payload, '$.name')
         ),
         ''
-    ) IS NULL THEN 'FAIL_NAME_NULL'
-    WHEN CAST(
-        get_json_object (raw_payload, '$.age') AS INT
-    ) < 18 THEN 'WARN_UNDERAGE'
-    ELSE 'PASS'
-END AS status,
-
--- payload = raw original para trazabilidad
-raw_payload AS payload,
-CASE
-    WHEN NULLIF(
+    ) AS customer_name,
+    NULLIF(
         TRIM(
-            get_json_object (raw_payload, '$.name')
+            get_json_object (raw_payload, '$.email')
         ),
         ''
-    ) IS NULL THEN TRUE
-    ELSE FALSE
-END AS dq_is_name_null,
-CASE
-    WHEN CAST(
-        get_json_object (raw_payload, '$.age') AS INT
-    ) < 18 THEN TRUE
-    ELSE FALSE
-END AS dq_is_underage,
-CASE
-    WHEN NULLIF(
-        TRIM(
-            get_json_object (raw_payload, '$.name')
-        ),
-        ''
-    ) IS NULL THEN 'FAIL_NAME_NULL'
-    WHEN CAST(
-        get_json_object (raw_payload, '$.age') AS INT
-    ) < 18 THEN 'WARN_UNDERAGE'
-    ELSE 'PASS'
-END AS dq_status
+    ) AS email,
+    CASE
+        WHEN NULLIF(
+            TRIM(
+                get_json_object (raw_payload, '$.name')
+            ),
+            ''
+        ) IS NULL THEN 'FAIL_NAME_NULL'
+        WHEN CAST(
+            get_json_object (raw_payload, '$.age') AS INT
+        ) < 18 THEN 'WARN_UNDERAGE'
+        ELSE 'PASS'
+    END AS status,
+    raw_payload AS payload,
+    CASE
+        WHEN NULLIF(
+            TRIM(
+                get_json_object (raw_payload, '$.name')
+            ),
+            ''
+        ) IS NULL THEN TRUE
+        ELSE FALSE
+    END AS dq_is_name_null,
+    CASE
+        WHEN CAST(
+            get_json_object (raw_payload, '$.age') AS INT
+        ) < 18 THEN TRUE
+        ELSE FALSE
+    END AS dq_is_underage,
+    CASE
+        WHEN NULLIF(
+            TRIM(
+                get_json_object (raw_payload, '$.name')
+            ),
+            ''
+        ) IS NULL THEN 'FAIL_NAME_NULL'
+        WHEN CAST(
+            get_json_object (raw_payload, '$.age') AS INT
+        ) < 18 THEN 'WARN_UNDERAGE'
+        ELSE 'PASS'
+    END AS dq_status
 FROM demo.bronze_customers;
